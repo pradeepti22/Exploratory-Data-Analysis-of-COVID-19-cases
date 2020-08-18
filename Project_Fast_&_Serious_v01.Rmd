@@ -1,0 +1,174 @@
+---
+title: "Project_Fast&Serious"
+output: html_document
+---
+#Install required packages
+```{r}
+require(tidyverse)
+require(ggplot2)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+```
+
+#Load the data
+```{r}
+Covid_19 <-read_csv('Final_Covid19_Dataset.csv')
+
+Covid_19
+```
+
+#Data Cleaning 
+#Convert date into 'date' format
+```{r setup, include=FALSE}
+class(Covid_19$Date)
+
+Covid_19$Date <- as.Date(Covid_19$Date, "%m/%d/%Y")
+
+sapply(Covid_19, class)
+Covid_19
+```
+
+#How is the number of cases increasing per day globally?
+```{r}
+#Total no of increasing casees per day globally
+globally_cases <- Covid_19%>% group_by(Date)%>%
+              summarise(No_of_cases_increased_per_day=sum(Confirmed))%>%
+              arrange(Date)
+globally_cases
+
+globally_cases%>%mutate_all(funs(. - lag(.))) %>% na.omit() 
+
+#First 10 records for analysis in detail 
+G_10<-globally_cases%>%head(10)
+G_10
+
+#Visualization on initial first 10 records
+Cases_per_day <- ggplot(G_10, aes(x=Date, y=No_of_cases_increased_per_day)) + 
+    geom_line(aes(group=1), colour="#000099")+
+    geom_point(size=3, colour="#CC0000")+
+   labs(x= "Date", y="No of cases", title="No of cases rise in one day") 
+   
+
+Cases_per_day
+```
+
+
+#Question -> Is there any correlation between a country’s death reported and its healthcare system rankings to provide positive health outcomes and to understand how they’re managing the virus.
+```{r}
+Heathcare <- Covid_19%>%
+            group_by(Country, Healthcare_System_Rank)%>%
+            summarise(Total_Deaths = max(Deaths))%>%
+           arrange(Healthcare_System_Rank)
+Heathcare
+```
+
+#Question ->Which countries are most affected by developed or developing countries?
+```{r}
+Distribution_class <- Covid_19%>%group_by(Classification)%>%
+                      summarise(Total_no_of_confirmed_cases = max(Confirmed))
+
+Distribution_class
+```
+
+
+#Question -> Which is the most affected developed country by Covid-19 outbreak?
+```{r}
+Max_count_developed <- Covid_19%>%group_by(Classification,Country)%>%
+                      summarise(Total_no_of_confirmed_cases = max(Confirmed))%>%
+                      arrange(desc(Total_no_of_confirmed_cases))
+
+Max_count_developed
+```
+
+
+#Question -> Which country has the highest fatality rate?
+```{r}
+F_rate_all<- Covid_19 %>% filter(Date == "2020-04-07")%>%mutate(Fatality_Rate = (Deaths/Confirmed)*100)
+
+F_rate <- F_rate_all%>%select(Country,Recovered,Confirmed,Fatality_Rate)%>%arrange(desc(Fatality_Rate))
+F_rate
+
+#Top 10 high Fatality rate
+F_Top_10<-F_rate %>%head(15)
+F_Top_10
+#Data visualization on top 10 high Fatality rate countries
+
+F_visual <- ggplot(data=F_Top_10, aes(x=reorder(Country, -Fatality_Rate), y=Fatality_Rate)) + geom_col(width=0.5, fill='#E69F00',color="darkred")+theme(axis.text.x = element_text(angle = 60, hjust = 1))+labs(x= "List of Countries", y="Fatality rate (%)",title="Fatality rate by Countries")
+
+F_visual
+
+```
+
+#Question -> Which country has the highest mortality rate?
+```{r}
+M_rate_all<- Covid_19 %>% filter(Date == "2020-04-07")%>%mutate(Mortality_Rate = (Recovered/Confirmed)*100)
+
+M_rate <- M_rate_all%>%select(Country,Recovered,Confirmed,Mortality_Rate)%>%arrange(desc(Mortality_Rate))
+
+#Top 10 high mortality rate
+M_Top_10<-M_rate %>%head(10)
+
+#Data visualization on top 10 high mortality rate countries
+M_visual<-M_Top_10%>%
+  ggplot( aes(x=reorder(Country, Mortality_Rate), y=Mortality_Rate)) +
+    geom_bar(stat="identity", fill="#FF9999", alpha=.6, width=.4,  colour="black")+
+    coord_flip() +
+    labs(x= "List of Countries", 
+             y="Mortality rate(%)", 
+             title="Mortality rate by Countries") +
+    theme_bw()
+
+M_visual
+
+```
+
+#Question -> Which country has the highest number of active cases? #Filter data for 4/7/2020
+```{r}
+Active_cases <- Covid_19%>%group_by(Country)%>%filter(Date == "2020-04-07")%>%  summarise(ConfirmedCases=max(Confirmed), 
+            RecoveredCases = max(Recovered), DeathsCases = max(Deaths)) %>%    
+            mutate(Active_cases = ConfirmedCases-(RecoveredCases+DeathsCases))%>%
+            arrange(desc(Active_cases))
+Active_cases
+
+```
+
+#Question -> Countries with most affected cases based upon count per 100k people?
+
+```{r}
+latest_date_data=Covid_19%>%filter(Date=="2020-04-07")
+
+count_per_100k=latest_date_data%>%mutate(Confirmed_per_100k=as.numeric(format(round((100000*Confirmed)/Total_Population),2)))
+count_per_100k
+
+count_per_100k_descending = count_per_100k[order(round(as.numeric(count_per_100k$Confirmed_per_100k)),decreasing = TRUE, na.last = TRUE), ]
+count_per_100k_descending%>%top_n(n=10, wt=Confirmed_per_100k)%>%ggplot(aes(x=reorder(Country, Confirmed_per_100k), y=Confirmed_per_100k, fill=Country)) + geom_bar(stat="identity")+geom_text(aes(label = Confirmed_per_100k))+ coord_flip()+labs(x="Country", y="Confirmed_per_100k", title = "Top 10 affected countries based on Count_per_100k")
+```
+
+#Question -> How COVID-19 affecting people from a different age group?
+
+```{r}
+Median_age_data <- latest_date_data$Median_age
+latest_date_data$Median_Age_Group <- cut(Median_age_data, 4)
+latest_date_data%>%summarise(sum(Confirmed))
+
+latest_date_data%>%group_by(Median_Age_Group)%>%summarise(sum(Confirmed),num_of_countries=n())
+```
+
+#Question -> What is the correlation between confirmed cases and Classification ?
+
+```{r}
+ggplot(latest_date_data, aes(x = Total_Population, y = Confirmed , color = Classification)) + scale_y_log10() + scale_x_log10()+ geom_point()
+```
+
+
+#Question: Which country has been most affected even though they have good healthcare facilities?
+
+```{r}
+death_with_health_care <- latest_date_data %>% select(Country,Deaths,Healthcare_System_Rank) %>% arrange(Healthcare_System_Rank)%>% head(10)
+death_with_health_care
+health_care_graph <- ggplot(death_with_health_care, aes(x = Healthcare_System_Rank, y = Deaths, color = Country)) + geom_point(size=3)
+health_care_graph
+
+```
+
